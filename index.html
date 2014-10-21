@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html>
 
 <head>
@@ -22,17 +22,10 @@
     precision highp float;
     #endif
 
-    #define SPHERES 10
-    #define MAXTOP 100.0
+    #define SPHERES 15
 
-    varying vec2 vUv;
-    varying vec3 vNormal;
     varying vec3 vPosition;
     varying float shadow;
-    varying vec2 vN;
-    varying float rim;
-    varying vec3 vColor;
-    varying float vY;
 
     uniform vec3 positions[ SPHERES ];
     uniform float scales[ SPHERES ];
@@ -41,32 +34,35 @@
     {
       vPosition = ( modelMatrix * vec4( position, 1. ) ).xyz;
 
-      shadow = 1.0;
+      float x = vPosition.x;
+      float y = vPosition.y;
+      float z = vPosition.z;
+  
+      //int hits = 0;
+
+      shadow = 1.;
 
       for( int i = 0; i < SPHERES; i++ ) {
+        float dx = positions[ i ].x - x;
+        float dy = positions[ i ].y - y;
+        float dz = positions[ i ].z - z;
+        float r = sqrt(scales[ i ]);
 
-        float x = vPosition.x;
-        float y = vPosition.y;
-        float z = vPosition.z;
-        float sx = positions[ i ].x;
-        float sy = positions[ i ].y;
-        float sz = positions[ i ].z;
-        float dx = x-sx;
-        float dy = y-sy;
-        float dz = z-sz;
+        float d = sqrt(dx*dx + dz*dz);
 
-        float d = dx*dx + dz*dz;
+        float dc = r - d;
 
-        if( d < scales[ i ] ){
-
-          shadow += 1.0 - sy / MAXTOP;
-
+        if( dc > 0.0 ){
+          
+          shadow -= sin( dc / r ) * r/45. / ( dy / 10. );
+          
+          //hits++;
         }
       }
     
-      shadow /= float( SPHERES );
-      shadow = 1.0 - clamp( shadow, 0., 1. );
-    
+      //shadow /= float( hits );
+      shadow = clamp( shadow, 0., 1. );
+          
       gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0);
     }
 
@@ -77,18 +73,14 @@
     #ifdef GL_ES
     precision highp float;
     #endif
-
-    varying vec2 vUv;
-    varying vec3 vNormal;
     varying float shadow;
-    varying vec2 vN;
-    varying float rim;
-    varying vec3 vColor;
-    varying float vY;
+    varying vec3 vPosition;
+    
+    uniform vec3 color;
 
     void main()
     {
-      gl_FragColor = vec4( shadow, shadow, shadow, 1.0 );
+      gl_FragColor = vec4( shadow * color, 1.0 );
     }
 
   </script>
@@ -147,19 +139,16 @@
           itemScales = [];
       var items = [];
 
-      function initFloor(w, h, name, pos, rot) {
+      var floor = function initFloor(w, h) {
 
-        var g = new THREE.PlaneGeometry(w, h, w/2, h/2);
-
-        //var m = new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: false });
-
-        //var m = new THREE.MeshLambertMaterial({ color: 0xaaffbb });
+        var g = new THREE.PlaneGeometry(w, h, w/4, w/4);
 
         var m = new THREE.ShaderMaterial({
 
           uniforms: {
             positions: { type: 'v3v', value: null },
-            scales: { type: 'fv1', value: null }
+            scales: { type: 'fv1', value: null },
+            color: {type: 'c', value: new THREE.Color( 0xdedede ) }
           },
 
           vertexShader: document.getElementById('vsFloor').textContent,
@@ -167,15 +156,31 @@
 
         });
 
+        //m = new 
+
+        //m = new THREE.MeshLambertMaterial({ color: 0xaaffbb });
+
         var mesh = new THREE.Mesh(g, m);
-        mesh.position.set(pos.x, pos.y, pos.z);
-        mesh.rotation.set(rot.x, rot.y, rot.z);
-        mesh.name = name;
+        mesh.rotation.set( -Math.PI / 2, 0, 0 );
+        mesh.name = "floor";
 
         return mesh;
-      }
-      var floor = initFloor(300, 300, "floor", new THREE.Vector3(), new THREE.Vector3(-Math.PI / 2, 0, 0)),
-          ceiling = initFloor(300, 300, "ceiling", new THREE.Vector3(0, 100, 0), new THREE.Vector3(Math.PI / 2, 0, 0));
+      }(300, 300);
+
+      var ceiling = function initCeiling(w, h){
+
+        var g = new THREE.PlaneGeometry(w, h);
+        
+        var m = new THREE.MeshBasicMaterial({ color: 0xffffff });
+                
+        var mesh = new THREE.Mesh(g, m);
+        mesh.position.set( 0, 100 ,0 );
+        mesh.rotation.set( Math.PI / 2, 0, 0 );
+        mesh.name = "ceiling";
+
+        return mesh;
+        
+      }(300, 300);
 
       scene.add(floor);
       scene.add(ceiling);
@@ -215,11 +220,14 @@
       function addSphere(position, scale) {
 
         var mesh = new THREE.Mesh(geometry.clone(), material);
+        
         mesh.position.copy(position);
+        
         mesh.scale.set(scale, scale, scale);
         mesh.rotation.set(Math.random() * 2 * Math.PI, Math.random() * 2 * Math.PI, Math.random() * 2 * Math.PI);
+        
         mesh._coeffX = Math.random() * 100;
-        mesh._coeffY = Math.random() * 35;
+        mesh._coeffY = Math.random() * 25;
         mesh._coeffZ = Math.random() * 100;
         mesh._coeffR = Math.random() * 0.0008 - 0.0004;
         mesh._coeffRY = Math.random() * 0.0004;
@@ -239,15 +247,9 @@
         return mesh;
       }
 
-      var position = new THREE.Vector3();
+      for (var j = 0; j < 15; j++) {
 
-      for (var j = 0; j < 10; j++) {
-
-        var r = 50 + Math.random() * 50;
-        var phi = Math.random() * 2 * Math.PI;
-        var theta = Math.random() * Math.PI;
-
-        var m = addSphere(position, 4 + Math.random() * 40);
+        var m = addSphere(new THREE.Vector3(), 5 + Math.random() * 40);
         m.name = "sphere#" + j;
         items.push(m);
 
@@ -258,11 +260,13 @@
         items[j].material.uniforms.scales.value = itemScales;
       }
 
-      floor.material.uniforms.positions.value = itemPositions;
-      floor.material.uniforms.scales.value = itemScales;
+      if(floor.material.uniforms !== undefined){
+        floor.material.uniforms.positions.value = itemPositions;
+        floor.material.uniforms.scales.value = itemScales;
+      }
 
-      ceiling.material.uniforms.positions.value = itemPositions;
-      ceiling.material.uniforms.scales.value = itemScales;
+      //ceiling.material.uniforms.positions.value = itemPositions;
+      //ceiling.material.uniforms.scales.value = itemScales;
 
       var pt = Date.now();
 
@@ -986,7 +990,6 @@
     varying vec3 vPosition;
     varying float occlusion;
     varying vec2 vN;
-    varying float rim;
     varying vec3 vColor;
     varying float vY;
 
@@ -1011,12 +1014,12 @@
 
     for( int i = 0; i < SPHERES; i++ ) {
 
-    vec3 dir = positions[ i ] - vPosition;
-    float l = dir.x * dir.x + dir.y * dir.y + dir.z * dir.z;
-    float t = 1. - max( 0., dot( on, dir / sqrt( l ) ) ) * scales[ i ] / l;
-    //float t = 1. - max( 0., dot( on, dir / l ) ) * pow( scales[ i ], 2. ) / pow( l, 2. );
+      vec3 dir = positions[ i ] - vPosition;
+      float l = dir.x * dir.x + dir.y * dir.y + dir.z * dir.z;
+      float t = 1. - max( 0., dot( on, dir / sqrt( l ) ) ) * scales[ i ] / l;
+      //float t = 1. - max( 0., dot( on, dir / l ) ) * pow( scales[ i ], 2. ) / pow( l, 2. );
 
-    occlusion += t;
+      occlusion += t;
     }
 
     occlusion /= float( SPHERES );
@@ -1030,12 +1033,7 @@
     float m = 2. * length( r + vec3( 0., 0., 1. ) );
     vN = r.xy / m + .5;
 
-    rim = .5 * abs( dot( n, e ) );
-    rim = clamp( rim, 0., 1. );
-
-    //occlusion *= 1. - rim;
-
-    vY = position.y;//
+    vY = vPosition.y;
 
     }
   </script>
@@ -1045,7 +1043,6 @@
     varying vec3 vNormal;
     varying float occlusion;
     varying vec2 vN;
-    varying float rim;
     varying vec3 vColor;
     varying float vY;
 
@@ -1057,18 +1054,28 @@
 
     void main(){
 
-    vec3 color = vColor;//mix( vec3( 1. ), vColor, smoothstep( .56, .55, .5 + .5 * sin( 30. * vY ) ) );
+      vec3 color = vColor;//mix( vec3( 1. ), vColor, smoothstep( .56, .55, .5 + .5 * sin( 30. * vY ) ) );
 
-    vec3 env = texture2D( tMatCap, vN ).rgb;
+      vec3 env = texture2D( tMatCap, vN ).rgb;
 
-    //color = mix( vec3( 0. ), color, .4 + occlusion );
-    color -= 10. * vec3( 1. - occlusion );
-    color += env;
-    //color *= 1. - rim;
-    color = clamp( color, 0., 1. );
-    float gamma = 2.2;
-    //color = pow( color, vec3(1.0 / gamma));
-    gl_FragColor = vec4( color, 1. );
+      //color = mix( vec3( 0. ), color, .4 + occlusion );
+      color -= 10. * vec3( 1. - occlusion );
+      color += env;
+      
+      color *= .75 + vY/150.;
+      
+      color = clamp( color, 0., 1. );
+      
+      float gamma = 2.2;
+      //color = pow( color, vec3(1.0 / gamma));
+      
+      if( vY<50. )
+        gl_FragColor = vec4( vec3( 0.,250.,0. ), 1. );
+      else
+        gl_FragColor = vec4( vec3( 250., 0.,0. ), 1. );
+        
+        
+      gl_FragColor = vec4( color, 1. );
 
     }
   </script>
